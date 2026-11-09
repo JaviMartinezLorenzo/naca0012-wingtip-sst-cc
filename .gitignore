@@ -13,6 +13,9 @@ OpenFOAM/constant/triSurface/wing.eMesh
 OpenFOAM/0/polyMesh/
 OpenFOAM/0/pointLevel
 OpenFOAM/0/cellLevel
+OpenFOAM/0/nSurfaceLayers
+OpenFOAM/0/thickness
+OpenFOAM/0/thicknessFraction
 OpenFOAM/log.*
 OpenFOAM/dynamicCode/
 scripts/results/

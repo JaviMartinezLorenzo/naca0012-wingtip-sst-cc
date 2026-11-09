@@ -13,332 +13,388 @@ FoamFile
     object      snappyHexMeshDict;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+//
+// NACA 0012 wingtip vortex (Chow, Zilliac & Bradshaw 1997), wall-resolved
+// (y+ ~ 1) mesh for SST vs SST-CC comparisons.
+//
+// Background (blockMeshDict, medium mesh): 406.4 x 203.2 x 203.2 mm cells.
+// Cell size per level (dx is twice dy = dz, see blockMeshDict):
+//
+//   level     3      4      5      6      7      8
+//   dy=dz   25.4   12.7   6.35   3.175  1.588  0.794  mm
+//   dx      50.8   25.4   12.7   6.35   3.175  1.588  mm
+//
+// Coordinates are metres, wing-fixed frame, origin at the root quarter chord
+// (LE at x = -0.300, TE at x = +0.901, tip at z = 0.914).
+//
+// Vortex core path used to place the refinement tubes: union of the measured
+// core (min Cp_static, RETAKALL.DAT, 10 crossflow planes) and the core of the
+// previous SST solution (scripts/results/plots/core_*_location.png):
+//
+//     x [m]    y_core [m]   z_core [m]   measured core radius
+//     0.18      -0.02         0.915      (forming at the tip)
+//     0.54      -0.035/-0.095 0.835/0.89    ~14 mm
+//     0.66      -0.057/-0.11  0.820/0.875   ~20 mm
+//     0.89      -0.096/-0.11  0.818/0.845   ~30 mm   (trailing edge)
+//     1.20      -0.081        0.81          ~35-40 mm
+//     1.73      -0.068/-0.085 0.805         ~38 mm   (last measured plane)
+//
+// The tube radii include the experiment-vs-CFD spread (up to ~55 mm over the
+// wing), so the core stays inside the finest level for both SST and SST-CC.
+//
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Which of the steps to run
 castellatedMesh true;
 snap            true;
 addLayers       true;
 
 
-// Geometry. Definition of all surfaces. All surfaces are of class
-// searchableSurface.
-// Surfaces are used
-// - to specify refinement for any mesh cell intersecting it
-// - to specify refinement for any mesh cell inside/outside/near
-// - to 'snap' the mesh boundary to the surface
 geometry
 {
+    // Wing surface, built analytically by geometry/build_wing_stl.py (same
+    // geometry as generate_wing.py, finely tessellated, watertight except the
+    // root, which lies on the symmetry plane).
     wing.stl
     {
         type triSurfaceMesh;
         name wing;
     }
 
-    refinementBox
+    // ---- Vortex core, level 7 (dy = 1.59 mm) --------------------------------
+    // Formation over the outboard upper surface: core moves from the tip edge
+    // (z ~ 0.915) inboard to z ~ 0.83 while radius grows from ~10 to ~30 mm.
+    vortexCoreFormation
+    {
+        type    cone;
+        point1  (0.10  0.010 0.915);
+        radius1 0.030;
+        point2  (0.54 -0.065 0.862);
+        radius2 0.055;
+    }
+
+    // Aft upper surface to trailing edge.
+    vortexCoreAft
+    {
+        type    cone;
+        point1  (0.53 -0.064 0.863);
+        radius1 0.056;
+        point2  (0.92 -0.105 0.830);
+        radius2 0.050;
+    }
+
+    // Near wake: the trailing-edge wake sheet rolls into the core here.
+    vortexCoreNearWake
+    {
+        type    cone;
+        point1  (0.91 -0.105 0.830);
+        radius1 0.051;
+        point2  (1.15 -0.086 0.812);
+        radius2 0.040;
+    }
+
+    // ---- Vortex, level 6 (dy = 3.18 mm), ~2.5 core radii + path spread ----
+    vortexInnerWing
+    {
+        type    cone;
+        point1  (-0.05  0.030 0.915);
+        radius1 0.060;
+        point2  ( 0.92 -0.105 0.830);
+        radius2 0.090;
+    }
+
+    vortexInnerWake
+    {
+        type    cone;
+        point1  (0.90 -0.105 0.830);
+        radius1 0.091;
+        point2  (2.00 -0.076 0.805);
+        radius2 0.085;
+    }
+
+    // ---- Vortex, level 5 (dy = 6.35 mm): outer swirl + wake-sheet roll-up -
+    vortexOuter
+    {
+        type    cone;
+        point1  (-0.15  0.040 0.900);
+        radius1 0.120;
+        point2  ( 2.25 -0.076 0.805);
+        radius2 0.150;
+    }
+
+    // ---- Wake sheet behind the outboard wing, level 4 (dy = 12.7 mm) ------
+    wakeSheet
     {
         type box;
-        min  (-0.4064 -0.3048 0.0  );
-        max  ( 1.6256  0.3048 1.016);
+        min  (0.80 -0.26 0.30);
+        max  (2.50 -0.03 0.99);
+    }
+
+    // ---- Inboard wing, mid-chord: surface capped at level 5 (limitRegions) --
+    // The inboard half-span (z < 0.50 m, i.e. > 0.34c from the tip) carries
+    // nearly 2-D attached flow and is far from the vortex. Capping its surface
+    // at level 5 (12.7 mm chordwise, 1 %c) removes ~1.5 M prism cells. The
+    // box stops short of the leading edge (x < -0.255, curvature level 7 kept)
+    // and the trailing edge (x > 0.86, level 7/8 kept).
+    inboardMidChord
+    {
+        type box;
+        min  (-0.255 -0.25 -0.01);
+        max  ( 0.860  0.20  0.50);
+    }
+
+    // ---- Near field around wing and tunnel walls, level 3 (dy = 25.4 mm) --
+    nearField
+    {
+        type box;
+        min  (-0.90 -0.35 0.00);
+        max  ( 2.80  0.30 1.10);
     }
 }
 
 
-// Settings for the castellatedMesh generation.
 castellatedMeshControls
 {
+    // Per-processor limit before switching to balance-then-refine.
+    maxLocalCells 2000000;
 
-    // Refinement parameters
-    // ~~~~~~~~~~~~~~~~~~~~~
+    // Must stay well above the castellated cell count (~2 M here before
+    // layers), otherwise refinement stops part-way through a level. The old
+    // value (2 M) would truncate this mesh.
+    maxGlobalCells 20000000;
 
-    // If local number of cells is >= maxLocalCells on any processor
-    // switches from from refinement followed by balancing
-    // (current method) to (weighted) balancing before refinement.
-    maxLocalCells 100000;
-
-    // Overall cell limit (approximately). Refinement will stop immediately
-    // upon reaching this number so a refinement level might not complete.
-    // Note that this is the number of cells before removing the part which
-    // is not 'visible' from the keepPoint. The final number of cells might
-    // actually be a lot less.
-    maxGlobalCells 2000000;
-
-    // The surface refinement loop might spend lots of iterations refining just a
-    // few cells. This setting will cause refinement to stop if <= minimumRefine
-    // are selected for refinement. Note: it will at least do one iteration
-    // (unless the number of cells to refine is 0)
     minRefinementCells 10;
 
-    // Allow a certain level of imbalance during refining
-    // (since balancing is quite expensive)
-    // Expressed as fraction of perfect balance (= overall number of cells /
-    // nProcs). 0=balance always.
     maxLoadUnbalance 0.10;
 
-
-    // Number of buffer layers between different levels.
-    // 1 means normal 2:1 refinement restriction, larger means slower
-    // refinement.
-    nCellsBetweenLevels 1;
-
+    // 3 buffer cells per level: every level jump is followed by at least
+    // three cells of the same size, which keeps size ratios across the vortex
+    // tubes and around the wing gradual (1 gives abrupt 2:1 jumps).
+    nCellsBetweenLevels 3;
 
 
-    // Explicit feature edge refinement
-    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    // Specifies a level for any cell intersected by its edges.
-    // This is a featureEdgeMesh, read from constant/triSurface for now.
+    // Explicit feature edge refinement: the blunt trailing edge (0.100 in =
+    // 2.54 mm). Level 8 gives ~3 cells across it, which snappy needs to snap
+    // both 90-deg TE corners and to keep prism layers on the TE face.
     features
     (
         {
             file "wing.eMesh";
-            level 4;
+            levels ((0.002 8) (0.006 7));
         }
     );
 
-
-
-    // Surface based refinement
-    // ~~~~~~~~~~~~~~~~~~~~~~~~
-
-    // Specifies two levels for every surface. The first is the minimum level,
-    // every cell intersecting a surface gets refined up to the minimum level.
-    // The second level is the maximum level. Cells that 'see' multiple
-    // intersections where the intersections make an
-    // angle > resolveFeatureAngle get refined up to the maximum level.
 
     refinementSurfaces
     {
         wing
         {
-            // Surface-wise min and max refinement level
-            level (4 5);
-            
+            // Level 6 on the wing (3.18 mm spanwise, 6.35 mm chordwise), except
+            // the inboard mid-chord region capped at 5 by limitRegions.
+            // curvatureLevel adds level 7 where the radius of curvature is
+            // below ~10 cells, i.e. the leading edge (r_LE = 19 mm) and the
+            // tip/trailing-edge junction.
+            level (6 7);
+            curvatureLevel (10 0 7 -1);
+            patchInfo
+            {
+                type wall;
+            }
         }
     }
 
-    // Resolve sharp angles
     resolveFeatureAngle 30;
-    
+
     planarAngle 30;
 
 
-    // Region-wise refinement
-    // ~~~~~~~~~~~~~~~~~~~~~~
-
-    // Specifies refinement level for cells in relation to a surface. One of
-    // three modes
-    // - distance. 'levels' specifies per distance to the surface the
-    //   wanted refinement level. The distances need to be specified in
-    //   descending order.
-    // - inside. 'levels' is only one entry and only the level is used. All
-    //   cells inside the surface get refined up to the level. The surface
-    //   needs to be closed for this to be possible.
-    // - outside. Same but cells outside.
-
     refinementRegions
     {
-        refinementBox
+        // Distance from the wing: level 5 covers the whole boundary layer
+        // (delta_99 ~ 20-30 mm on the suction side) beyond the prism layers;
+        // level 4 gives a smooth transition into the potential-flow region.
+        wing
         {
-            mode inside;
-            levels ((1E15 4));
+            mode distance;
+            levels ((0.040 5) (0.120 4));
         }
+
+        vortexCoreFormation  { mode inside; levels ((1E15 7)); }
+        vortexCoreAft        { mode inside; levels ((1E15 7)); }
+        vortexCoreNearWake   { mode inside; levels ((1E15 7)); }
+
+        vortexInnerWing      { mode inside; levels ((1E15 6)); }
+        vortexInnerWake      { mode inside; levels ((1E15 6)); }
+
+        vortexOuter          { mode inside; levels ((1E15 5)); }
+
+        wakeSheet            { mode inside; levels ((1E15 4)); }
+
+        nearField            { mode inside; levels ((1E15 3)); }
     }
 
 
-    // Mesh selection
-    // ~~~~~~~~~~~~~~
-
-    // After refinement patches get added for all refinementSurfaces and
-    // all cells intersecting the surfaces get put into these patches. The
-    // section reachable from the locationInMesh is kept.
-    // NOTE: This point should never be on a face, always inside a cell, even
-    // after refinement.
-    locationInMesh (-1.2192 0.0 0.6096);
+    // Upper limit on the refinement level (same syntax as refinementRegions).
+    limitRegions
+    {
+        inboardMidChord      { mode inside; levels ((1E15 5)); }
+    }
 
 
-    // Whether any faceZones (as specified in the refinementSurfaces)
-    // are only on the boundary of corresponding cellZones or also allow
-    // free-standing zone faces. Not used if there are no faceZones.
+    // Upstream freestream point. Moved off the background-mesh faces (the
+    // old point (-1.2192 0 0.6096) lay exactly on a block vertex).
+    locationInMesh (-1.1937 0.01733 0.6371);
+
     allowFreeStandingZoneFaces true;
 }
 
 
-
-// Settings for the snapping.
 snapControls
 {
-    //- Number of patch smoothing iterations before finding correspondence
-    //  to surface
     nSmoothPatch 3;
 
-    //- Relative distance for points to be attracted by surface feature point
-    //  or edge. True distance is this factor times local
-    //  maximum edge length.
     tolerance 2.0;
 
-    //- Number of mesh displacement relaxation iterations.
-    nSolveIter 50;
+    // More displacement relaxation for the fine leading/trailing edge cells.
+    nSolveIter 100;
 
-    //- Maximum number of snapping relaxation iterations. Should stop
-    //  before upon reaching a correct mesh.
     nRelaxIter 10;
 
-    // Feature snapping
+    nFeatureSnapIter 20;
 
-        //- Number of feature edge snapping iterations.
-        //  Leave out altogether to disable.
-        nFeatureSnapIter 20;
+    implicitFeatureSnap false;
 
-        //- Detect (geometric only) features by sampling the surface
-        //  (default=false).
-        implicitFeatureSnap false;
+    explicitFeatureSnap true;
 
-        //- Use castellatedMeshControls::features (default = true)
-        explicitFeatureSnap true;
-
-        //- Detect points on multiple surfaces (only for explicitFeatureSnap)
-        multiRegionFeatureSnap false;
+    multiRegionFeatureSnap false;
 }
 
 
-
-// Settings for the layer addition.
 addLayersControls
 {
-    // Are the thickness parameters below relative to the undistorted
-    // size of the refined cell outside layer (true) or absolute sizes (false).
+    // firstLayerThickness is absolute and finalLayerThickness is relative to
+    // the local cell size (OpenFOAM 'firstAndRelativeFinal' layer model,
+    // selected automatically when exactly these two are given). This gives:
+    //   - the same first cell height (hence y+) everywhere on the wing,
+    //   - a smooth size match with the local cell outside the layers.
+    // snappy computes the expansion ratio locally from these two values and
+    // nSurfaceLayers:
+    //
+    //   surface level   dy_cell   final layer   expansion   stack height
+    //        5          6.35 mm     1.90 mm       1.245        9.7 mm
+    //        6          3.18 mm     0.95 mm       1.21         5.5 mm
+    //        7          1.59 mm     0.48 mm       1.175        3.2 mm
+    //        8          0.79 mm     0.24 mm       1.14         1.9 mm
+    //
+    // First cell height 10 um -> first-cell-centre y+ ~ 0.7 (mean),
+    // ~1.3 under the tip vortex, ~2.2 at the leading-edge suction peak
+    // (Re_c = 4.6e6). The stack covers y+ < ~600, i.e. the viscous sublayer,
+    // buffer layer and the log layer.
     relativeSizes false;
 
-    // Per final patch (so not geometry!) the layer information
     layers
     {
-        "wing.*"
+        wing
         {
-            nSurfaceLayers 10;
+            nSurfaceLayers 25;
         }
     }
 
-    // Expansion factor for layer mesh
-    expansionRatio 1.2;
+    firstLayerThickness 1.0e-5;
 
-    // Wanted thickness of final added cell layer. If multiple layers
-    // is the thickness of the layer furthest away from the wall.
-    // Relative to undistorted size of cell outside layer.
-    // See relativeSizes parameter.
-    firstLayerThickness 3.8e-4;
+    finalLayerThickness 0.3;
 
-    // Minimum thickness of cell layer. If for any reason layer
-    // cannot be above minThickness do not add layer.
-    // Relative to undistorted size of cell outside layer.
-    minThickness 3.8e-5;
+    // Absolute (relativeSizes false): give up layers only where the whole
+    // stack would be thinner than 0.2 mm.
+    minThickness 2.0e-4;
 
-    // If points get not extruded do nGrow layers of connected faces that are
-    // also not grown. This helps convergence of the layer addition process
-    // close to features.
-    // Note: changed(corrected) w.r.t 1.7.x! (didn't do anything in 1.7.x)
     nGrow 0;
 
-    // Advanced settings
-
-    // When not to extrude surface. 0 is flat surface, 90 is when two faces
-    // are perpendicular
     featureAngle 130;
 
-    // At non-patched sides allow mesh to slip if extrusion direction makes
-    // angle larger than slipFeatureAngle.
     slipFeatureAngle 30;
 
-    // Maximum number of snapping relaxation iterations. Should stop
-    // before upon reaching a correct mesh.
     nRelaxIter 5;
 
-    // Number of smoothing iterations of surface normals
-    nSmoothSurfaceNormals 1;
+    nSmoothSurfaceNormals 3;
 
-    // Number of smoothing iterations of interior mesh movement direction
     nSmoothNormals 3;
 
-    // Smooth layer thickness over surface patches
     nSmoothThickness 10;
 
-    // Stop layer growth on highly warped cells
     maxFaceThicknessRatio 0.5;
 
-    // Reduce layer growth where ratio thickness to medial
-    // distance is large
     maxThicknessToMedialRatio 0.3;
 
-    // Angle used to pick up medial axis points
-    // Note: changed(corrected) w.r.t 1.7.x! 90 degrees corresponds to 130
-    // in 1.7.x.
     minMedialAxisAngle 90;
 
-
-    // Create buffer region for new layer terminations
+    // Keep 0. snappy tapers the layer count down next to faces it could not
+    // extrude (one layer less per ring of faces), keeping the stack height, so
+    // tapered faces get a THICKER first cell. That is why the 'relaxed' checks
+    // below matter: they stop faces being un-extruded in the first place.
+    // (-1 = no taper: produced abrupt layer ends, failing twist checks, and a
+    // segfault in snappyHexMesh v2312.)
     nBufferCellsNoExtrude 0;
 
-
-    // Overall max number of layer addition iterations. The mesher will exit
-    // if it reaches this number of iterations; possibly with an illegal
-    // mesh.
     nLayerIter 50;
+
+    // Use the 'relaxed' quality settings from the first layer iteration.
+    nRelaxedIter 0;
 }
 
 
-
-// Generic mesh quality settings. At any undoable phase these determine
-// where to undo.
 meshQualityControls
 {
     #include "meshQualityDict"
 
+    // Override for wall-resolved layers. snappy's scaled cell determinant is
+    // ~27*h^2/(dx*dz) for a thin cell of height h on a dx*dz face. With
+    // h = 10 um on 3-13 mm faces it is 3e-5..3e-4, so the default 0.001
+    // (meshQualityDict) rejects every near-wall prism (first run: 1.1 M
+    // faces flagged, < 30 % layer coverage). A low determinant only reflects
+    // the intended aspect ratio, not a defective cell.
+    minDeterminant 1e-6;
 
-    // Advanced
+    // Used for layer addition (nRelaxedIter 0: from the first iteration).
+    // Snapping still uses the full set above.
+    //
+    // On curved walls (rounded tip, leading edge) the snapped wall faces are
+    // slightly non-planar: a 3 mm face on a 20-70 mm radius is warped by
+    // ~0.1 mm, i.e. 10x the 10 um first layer. The face-centre tet
+    // decomposition and the twist measure of these thin prisms then fail,
+    // although cell volumes and face pyramids are positive. With the full
+    // checks the tip got layers on only ~1/3 of its faces, and the resulting
+    // layer taper spread a thick first cell over most of the wing.
+    //
+    // Relaxing these two checks (layer phase only):
+    //   coverage 96 % of faces with all 25 layers (tip 100 %, TE 100 %,
+    //   LE 86 %), first cell 10 um on > 90 % of the wing; checkMesh "Mesh OK".
+    // The remaining severe non-orthogonality (max ~87 deg, ~17 k faces) is
+    // entirely inside the prism layers (< 0.5 mm from the wall); the bulk mesh
+    // stays below ~68 deg. See MESH_DESIGN.md.
+    relaxed
+    {
+        maxNonOrtho   75;
+        minTetQuality -1e30;
+        minTwist      -1;
+    }
 
-    //- Number of error distribution iterations
     nSmoothScale 4;
-    //- Amount to scale back displacement at error points
+
     errorReduction 0.75;
 }
 
 
-// Advanced
-
 debugFlags
 (
-	// write intermediate meshes
-	//mesh
-	
-	// write current mesh intersections as .obj files
-	//intersections
-	
-	// write information about explicit feature edge
-	// refinement
-	//featureSeeds
-	
-	// write attraction as .obj files
-	//attraction
-	
-	// write information about layers
-	//layerInfo
-	
 );
 
 writeFlags
 (
-	// write volScalarField with cellLevel for
-	// postprocessing
-	//scalarLevels
-	
-	// write cellSets, faceSets of faces in layer
-	//layerSets
-	
-	// write volScalarField for layer coverage
-	//layerFields
+    scalarLevels
+    layerSets
+    layerFields
 );
 
-// Merge tolerance. Is fraction of overall bounding box of initial mesh.
-// Note: the write tolerance needs to be higher than this.
 mergeTolerance 1e-6;
 
 

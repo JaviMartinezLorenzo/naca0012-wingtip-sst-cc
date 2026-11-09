@@ -14,7 +14,44 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-scale  0.0254;
+// Background mesh for snappyHexMesh.
+//
+// Domain extents and patches are unchanged from the original case.
+//
+// The ONLY change is the background cell shape: cells are now stretched 2:1
+// in the streamwise direction (x), i.e. 16 in x 8 in x 8 in instead of an
+// 8 in cube. snappyHexMesh refinement is octree (isotropic splitting), so
+// every refined cell keeps this 2:1 shape:
+//
+//   level :    0      3      4      5      6      7      8
+//   dy=dz : 203.2  25.4   12.7   6.35   3.175  1.588  0.794  mm
+//   dx    : 406.4  50.8   25.4   12.7   6.35   3.175  1.588  mm
+//
+// Justification:
+//   - Wingtip vortex: its axis is within ~1-6 deg of x, and its radial
+//     gradients (core radius 15-40 mm) are much stronger than the streamwise
+//     ones (the core changes over a chord length). Cross-plane (y,z)
+//     resolution is what controls numerical diffusion of the core, and it is
+//     unchanged by the stretching.
+//   - Wing surface: the upper/lower faces have normals close to y, so the
+//     2:1 cells halve the surface face count. That halves the prism-layer
+//     cells, which is the dominant cost of a wall-resolved (y+~1) mesh.
+//     Chordwise spacing at level 6 is 6.35 mm (0.52 %c), refined to level 7/8
+//     at the leading and trailing edges.
+//
+// Mesh family for the grid study: change ONLY the three cell counts below.
+// All snappyHexMesh levels are relative to the background, so the whole
+// mesh scales consistently (refinement ratio ~1.26 per direction).
+//
+//            nx   ny   nz     background (in)       total cells (snappy v2312)
+//   coarse   12    3    5     20.0 x 10.7 x 9.6        2.34 M (measured)
+//   medium   15    4    6     16.0 x  8.0 x 8.0        4.48 M (measured)  <- default
+//   fine     19    5    8     12.6 x  6.4 x 6.0        ~9.5 M (castellated 4.0 M measured
+//                                                       + ~5.5 M layers estimated)
+//
+// (See MESH_DESIGN.md for the full rationale.)
+
+scale  0.0254;      // inches -> metres
 
 xmin -96;
 xmax 144;
@@ -23,41 +60,31 @@ ymax  16;
 zmin   0;
 zmax  48;
 
-deltax 8;
-deltay 8;
-deltaz 8;
-
-lx #calc "$xmax - $xmin";
-ly #calc "$ymax - $ymin";
-lz #calc "$zmax - $zmin";
-
-xcells #calc "round($lx/$deltax)";
-ycells #calc "round($ly/$deltay)";
-zcells #calc "round($lz/$deltaz)";
+nx  15;
+ny   4;
+nz   6;
 
 vertices
 (
-	($xmin $ymin $zmin)		//0
-	($xmax $ymin $zmin)		//1
-	($xmax $ymax $zmin)		//2
-	($xmin $ymax $zmin)		//3
-	
-	($xmin $ymin $zmax)		//4
-	($xmax $ymin $zmax)		//5
-	($xmax $ymax $zmax)		//6
-	($xmin $ymax $zmax)		//7
+    ($xmin $ymin $zmin)     //0
+    ($xmax $ymin $zmin)     //1
+    ($xmax $ymax $zmin)     //2
+    ($xmin $ymax $zmin)     //3
+
+    ($xmin $ymin $zmax)     //4
+    ($xmax $ymin $zmax)     //5
+    ($xmax $ymax $zmax)     //6
+    ($xmin $ymax $zmax)     //7
 );
 
 blocks
 (
-    hex ( 0 1 2 3 4 5 6 7) ($xcells $ycells $zcells) simpleGrading (1 1 1)
+    hex (0 1 2 3 4 5 6 7) ($nx $ny $nz) simpleGrading (1 1 1)
 );
 
 edges
 (
-
 );
-
 
 boundary
 (
@@ -96,7 +123,7 @@ boundary
             (0 1 5 4)
         );
     }
-    
+
     back
     {
         type        symmetryPlane;
@@ -105,7 +132,7 @@ boundary
             (0 3 2 1)
         );
     }
-    
+
     front
     {
         type        patch;
@@ -114,7 +141,6 @@ boundary
             (4 5 6 7)
         );
     }
-
 );
 
 mergePatchPairs

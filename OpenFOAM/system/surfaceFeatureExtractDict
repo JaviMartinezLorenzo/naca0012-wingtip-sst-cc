@@ -28,6 +28,20 @@ wing.stl
         includedAngle   150;
     }
 
+    // Keep only the blunt trailing-edge corners (refined to level 8 and used
+    // for feature snapping in snappyHexMeshDict).
+    // - openEdges no: the STL is open at the root (closed by the symmetry
+    //   plane) and has a non-conforming seam where the straight wing meets
+    //   the revolved tip; both would otherwise be refined along their length.
+    // - insideBox: drops a few spurious 'feature' edges from sliver
+    //   triangles on the revolved tip surface (x ~ 0.13-0.24 m).
+    subsetFeatures
+    {
+        nonManifoldEdges no;
+        openEdges        no;
+        insideBox        (0.85 -0.25 -0.01) (0.95 0.0 0.95);
+    }
+
 
     // Write options
 

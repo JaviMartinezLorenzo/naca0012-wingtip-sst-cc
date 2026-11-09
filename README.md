@@ -46,6 +46,15 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
 ```
 
 4. **Run the case**
+
+   Unattended, from `OpenFOAM/` (keeps running after you close the SSH session):
+```bash
+   nohup ./Allrun.sh --mesh-only > Allrun.log 2>&1 &   # drop --mesh-only to also solve
+   tail -f Allrun.log
+```
+   `Allrun.sh` stops before solving if the disk is short of space, `checkMesh` fails or the wall layers are poor. See `./Allrun.sh --help` for `--solve-only` (reuse the mesh or resume a run) and `--clean`.
+
+   Or step by step:
 ```bash
    openfoam<version>
    cd OpenFOAM

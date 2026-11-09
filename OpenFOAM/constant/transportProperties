@@ -16,7 +16,9 @@ FoamFile
 
 transportModel  Newtonian;
 
-nu              1e-05;
+// nu = U_inf * c / Re_c = 51.816 m/s * 1.2192 m / 4.6e6 = 1.37335e-5 m^2/s
+// (matches the experiment's chord Reynolds number; 1e-5 gave Re_c = 6.3e6)
+nu              1.37335e-05;
 
 
 // ************************************************************************* //

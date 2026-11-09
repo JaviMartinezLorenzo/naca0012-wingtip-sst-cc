@@ -1,6 +1,6 @@
 # NACA 0012 Wingtip Vortex — OpenFOAM Case
 
-Numerical simulation of the near-field wingtip vortex flow over a half-span **NACA 0012** wing using OpenFOAM (`pimpleFoam`), validated against the NASA Ames experimental dataset of Chow, Zilliac & Bradshaw (1997).
+Numerical simulation of the near-field wingtip vortex flow over a half-span **NACA 0012** wing using OpenFOAM (steady RANS, `simpleFoam`), validated against the NASA Ames experimental dataset of Chow, Zilliac & Bradshaw (1997).
 
 > **Reference experiment:**
 > [NASA Turbulence Modeling Resource — Exp: Flow Behind a NACA 0012 Wingtip](https://tmbwg.github.io/turbmodels/Other_exp_Data/wingtip0012_exp.html)
@@ -29,7 +29,11 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
 ```bash
    python geometry/generate_wing.py
 ```
-   Copy the generated surface into `OpenFOAM/constant/triSurface/` (already done for this case).
+   The STL used for meshing is built analytically from the same geometry definition, with the fine, watertight tessellation a wall-resolved mesh needs (already done for this case):
+```bash
+   python geometry/build_wing_stl.py OpenFOAM/constant/triSurface/wing.stl
+```
+   See [MESH_DESIGN.md](MESH_DESIGN.md) for the mesh strategy (wall-resolved y+ ≈ 1, vortex-core refinement, grid study).
 
 2. **Preprocess experimental data → probe coordinates**
 ```bash
@@ -44,13 +48,23 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
 4. **Run the case**
 ```bash
    openfoam<version>
+   cd OpenFOAM
    blockMesh
    surfaceFeatureExtract
-   snappyHexMesh -overwrite
+   decomposePar -force
+   mpirun -np 12 --map-by socket --bind-to core snappyHexMesh -parallel -overwrite | tee log.snappyHexMesh
+   reconstructParMesh -constant
+   rm -rf processor*
+   checkMesh | tee log.checkMesh
    decomposePar
-   mpirun -np 8 pimpleFoam -parallel | tee log.pimpleFoam
-   reconstructPar
+   mpirun -np 12 --map-by socket --bind-to core potentialFoam -parallel -writephi | tee log.potentialFoam
+   mpirun -np 12 --map-by socket --bind-to core simpleFoam -parallel | tee log.simpleFoam
+   reconstructPar -latestTime
 ```
+   - `-np` must equal `numberOfSubdomains` in `system/decomposeParDict` (12, the server's physical cores; use 8 on a 4-core laptop).
+   - `potentialFoam` is needed: starting `simpleFoam` from the uniform field gives very large continuity errors in the first iterations.
+   - Medium mesh: ~4.5 M cells, 1–2 GB per written time; keep the case on a partition with tens of GB free.
+   - Steady run: up to 5000 iterations, written every 500 (last 2 kept). `yPlus`, residuals and C_L/C_D are logged; for a quick y⁺ check set `writeInterval 250` in `system/controlDict`.
 
 5. **Sample probes from the solved case**
 ```bash

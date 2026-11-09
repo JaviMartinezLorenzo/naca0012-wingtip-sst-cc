@@ -16,26 +16,29 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 
-application     pimpleFoam;
+// Steady RANS: one 'time step' = one SIMPLE iteration.
+application     simpleFoam;
 
-startFrom       latestTime;        
+startFrom       latestTime;
 
 startTime       0;
 
 stopAt          endTime;
 
-endTime         10;                 
+// Iteration limit; residualControl in fvSolution stops earlier if converged.
+endTime         5000;
 
-deltaT          1e-3;               
+deltaT          1;
 
-writeControl    runTime;
+writeControl    timeStep;
 
-writeInterval   0.01;                
+writeInterval   500;
 
-purgeWrite      0;                  
+// Keep only the last 2 written iterations (each ~1-2 GB on the medium mesh).
+purgeWrite      2;
 
-writeFormat     binary;         
-    
+writeFormat     binary;
+
 writePrecision  6;
 
 writeCompression off;
@@ -44,14 +47,42 @@ timeFormat      general;
 
 timePrecision   6;
 
-adjustTimeStep  no;
-
-maxCo           1;
-
-maxDeltaT       1e-2;
+runTimeModifiable true;
 
 functions
 {
+
+    // Convergence monitoring: initial residuals per iteration
+    residuals
+    {
+        type            solverInfo;
+        libs            (utilityFunctionObjects);
+        fields          (p U k omega);
+        writeControl    timeStep;
+        writeInterval   1;
+    }
+
+    // Lift/drag on the half wing. Freestream is along +x (the wing is
+    // pitched in the geometry), so lift is +y and drag +x.
+    // Aref = chord x span to tip = 1.2192 x 0.9144 m.
+    forceCoeffs
+    {
+        type            forceCoeffs;
+        libs            (forces);
+        patches         (wing);
+        rho             rhoInf;
+        rhoInf          1.225;
+        CofR            (0 0 0);
+        liftDir         (0 1 0);
+        dragDir         (1 0 0);
+        pitchAxis       (0 0 1);
+        magUInf         51.816;
+        lRef            1.2192;
+        Aref            1.11484;
+        writeControl    timeStep;
+        writeInterval   1;
+        log             on;
+    }
 
     QCriterion
     {
@@ -69,6 +100,26 @@ functions
         writeControl    writeTime;
         writeFields     yes;
         log             on;
+    }
+
+    // Near-wall check for the wall-resolved mesh: target first-cell y+ ~ 1
+    // (mean ~0.7, up to ~2 at the leading-edge suction peak). Writes the
+    // yPlus field and logs min/max/average y+ on the wing per write.
+    yPlus
+    {
+        type            yPlus;
+        libs            (fieldFunctionObjects);
+        writeControl    writeTime;
+        log             on;
+    }
+
+    wallShearStress
+    {
+        type            wallShearStress;
+        libs            (fieldFunctionObjects);
+        patches         (wing);
+        writeControl    writeTime;
+        log             off;
     }
 
     CpStatic

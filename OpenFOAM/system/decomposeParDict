@@ -14,7 +14,9 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-numberOfSubdomains  8;
+// 12 = physical cores of the run server (2 x 6-core Xeon E5-2620 v3).
+// Use 8 on the 4-core/8-thread laptop.
+numberOfSubdomains  12;
 
 method  scotch;
 

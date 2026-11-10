@@ -15,7 +15,7 @@ Files changed or added:
 | `geometry/build_wing_stl.py` | New. Builds the wing STL analytically (§5.4) |
 | `OpenFOAM/constant/triSurface/wing.stl` | Output of the script above (binary STL) |
 
-Also changed for steady RANS: `constant/transportProperties` (ν matched to Re_c), `system/fvSchemes`, `system/fvSolution`, `system/controlDict` (`simpleFoam`, iteration-based, residual and force-coefficient monitors). Boundary conditions (`0/`) and `meshQualityDict` are unchanged.
+Also changed for steady RANS: `constant/transportProperties` (ν matched to Re_c), `system/fvSchemes`, `system/fvSolution`, `system/controlDict` (`simpleFoam`, iteration-based, residual and force-coefficient monitors). `0/nut` uses `nutUSpaldingWallFunction` on the wing (§2). Other boundary conditions and `meshQualityDict` are unchanged.
 
 ---
 
@@ -55,12 +55,11 @@ Cell size at level *n* is Δ₀/2ⁿ with Δ₀ = 203.2 mm: L3 25.4, L4 12.7, L5
 - The tip-vortex origin is a crossflow separation. Its location depends on wall shear and adverse pressure gradient, which wall functions model through an equilibrium log law that does not hold there.
 - The published SST-CC/SARC studies of this case (e.g. Dacles-Mariani et al. 1995; Churchfield & Blaisdell 2009) use y⁺ ≤ 1 grids.
 
-**Boundary conditions do not need changing.** In OpenFOAM v2306:
-- `omegaWallFunction` blends the viscous and log-layer values;
-- `nutkWallFunction` returns ν_t = 0 below y⁺_lam;
-- `kqRWallFunction` is zero-gradient.
+**ν_t wall condition: `nutUSpaldingWallFunction`** (changed from `nutkWallFunction`). `k` (`kqRWallFunction`) and `ω` (`omegaWallFunction`, which blends viscous and log-layer values) are unchanged.
 
-Together they behave as a low-Re treatment at y⁺ ≈ 1. They also degrade gracefully on the ~4 % of faces with fewer layers. Optional: `nutUSpaldingWallFunction` is even more forgiving there.
+The original `nutkWallFunction` estimates y⁺ from k in the first cell (C_μ^¼·y·√k/ν). Where that estimate is above y⁺_lam = 11.5, it applies a log-law ν_t at the wall and reports that k-based y⁺, even with a 10 µm first cell. Because `kqRWallFunction` is zero-gradient, near-wall k is not forced to zero, so this can happen on fine faces (e.g. near the LE stagnation line). The first server run (nutk, iteration 500) gave area-averaged y⁺ = 1.68 but a maximum of 251, which is impossible on faces with the full layer stack and points to this switch.
+
+Spalding's law is continuous over the whole y⁺ range and is driven by the wall velocity gradient, not by k. It behaves as a low-Re condition at y⁺ ≈ 1, handles the ~4 % of faces with fewer layers gracefully, and makes the `yPlus` output the true wall-shear y⁺. It applies identically to SST and SST-CC.
 
 ---
 

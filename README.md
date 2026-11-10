@@ -54,6 +54,10 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
 ```
    `--detach` runs the quick checks in your terminal, then relaunches the script in its own session with no terminal. Plain `nohup` is not enough: Open MPI's `mpirun` stops the job when the SSH session closes. The script prints the PID and the command to stop it, and refuses to start a second run in the same case.
 
+   - **Choosing the OpenFOAM version:** source it before starting, e.g. `source /usr/lib/openfoam/openfoam2312/etc/bashrc`. Otherwise the script sources the newest installed version.
+   - **Stopping early but cleanly:** `sed -i 's/^stopAt .*/stopAt          writeNow;/' system/controlDict`. The solver writes the current iteration and exits, and `Allrun.sh` reconstructs it. Afterwards restore the file with `git checkout system/controlDict`.
+   - **Re-running after changing `0/` or the models:** `./Allrun.sh --detach --solve-only --fresh`. This moves the previous run to `previous/<date>/` and starts from iteration 0. Without `--fresh`, the solver would continue from the old fields, which still carry the old boundary conditions.
+
    `Allrun.sh` stops before solving if the disk is short of space, `checkMesh` fails or the wall layers are poor. See `./Allrun.sh --help` for `--mesh-only`, `--solve-only` (reuse the mesh or resume a run) and `--clean`.
 
    Or step by step:

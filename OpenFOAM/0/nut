@@ -52,9 +52,15 @@ boundaryField
         type            symmetryPlane;
     }
 
+    // Spalding's law: continuous over the whole y+ range and driven by the
+    // wall velocity gradient (not by k), so it acts as a low-Re condition at
+    // y+ ~ 1 and still behaves on the few faces with a thicker first cell.
+    // nutkWallFunction switched to a log-law wherever its k-based y+ estimate
+    // exceeded 11.5, even with a 10 um first cell. The yPlus function object
+    // now reports the wall-shear y+.
     wing
     {
-        type            nutkWallFunction;
+        type            nutUSpaldingWallFunction;
         value           uniform 0;
     }
 }

@@ -20,6 +20,7 @@ OpenFOAM/log.*
 OpenFOAM/dynamicCode/
 OpenFOAM/subsetBox.obj
 OpenFOAM/.Allrun.pid
+OpenFOAM/previous/
 scripts/results/
 
 # Python

@@ -13,8 +13,16 @@
 #                  The quick checks run first, so errors show immediately.
 #   --mesh-only    stop after the mesh has passed its checks
 #   --solve-only   use the existing mesh; resumes if a run was interrupted
+#   --fresh        with --solve-only: move the previous run (processor*, time
+#                  folders, postProcessing, solver logs) to previous/<date>/
+#                  and start the solver from iteration 0. Needed after
+#                  changing anything in 0/ or the models.
 #   --clean        delete previous mesh, results and logs first
 #   -h, --help     show this help
+#
+# OpenFOAM: the version already loaded in the shell is used. If none is
+# loaded, the newest installed one is sourced. To pick one, source it first:
+#   source /usr/lib/openfoam/openfoam2312/etc/bashrc
 #
 # Environment overrides:
 #   MPI_OPTS          mpirun options (default: --map-by socket --bind-to core)
@@ -64,7 +72,7 @@ die() {
 
 trap 'die "unexpected failure at line $LINENO of Allrun.sh"' ERR
 
-usage() { sed -n '3,30p' "$SELF" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,38p' "$SELF" | sed 's/^# \{0,1\}//'; }
 
 hms() { printf '%dh%02dm%02ds' $(($1/3600)) $(($1%3600/60)) $(($1%60)); }
 
@@ -119,7 +127,7 @@ mean_layers() {
 # Arguments and pre-flight checks
 #------------------------------------------------------------------------------
 
-doMesh=true doSolve=true doClean=false doDetach=false
+doMesh=true doSolve=true doClean=false doDetach=false doFresh=false
 childArgs=()                      # options passed on to a detached run
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -127,6 +135,7 @@ while [ $# -gt 0 ]; do
         --mesh-only)  doSolve=false ;;
         --solve-only) doMesh=false ;;
         --clean)      doClean=true ;;
+        --fresh)      doFresh=true ;;
         -h|--help)    usage; exit 0 ;;
         *)            usage; die "unknown option: $1" ;;
     esac
@@ -138,6 +147,8 @@ done
     || die "--mesh-only and --solve-only cannot be combined"
 [ "$doMesh" = true ] || [ "$doClean" = false ] \
     || die "--clean would delete the mesh that --solve-only needs"
+[ "$doFresh" = false ] || [ "$doMesh" = false ] \
+    || die "--fresh only works with --solve-only"
 
 foam_ok || die "OpenFOAM not found or not working: source its etc/bashrc first"
 
@@ -181,6 +192,14 @@ to delete them, or --solve-only to reuse the mesh."
 else
     [ -f constant/polyMesh/faces ] || [ -f constant/polyMesh/faces.gz ] \
         || die "no mesh in constant/polyMesh for --solve-only"
+
+    # Without --fresh, old results would be picked up as the starting point
+    # (decomposePar takes every time folder), with the old 0/ settings.
+    if [ "$doFresh" = false ] && [ -z "$(time_dirs processor0 2>/dev/null)" ] \
+       && [ -n "$(time_dirs .)" ]; then
+        die "results from a previous run found ($(time_dirs . | tr '\n' ' ')). \
+Use --fresh to move them to previous/ and start again from iteration 0."
+    fi
 fi
 
 #- Detach: relaunch in a new session (setsid) with no terminal, so that
@@ -253,6 +272,17 @@ fi
 #------------------------------------------------------------------------------
 
 if [ "$doSolve" = true ]; then
+    if [ "$doFresh" = true ]; then
+        archive="previous/$(date +%Y%m%d-%H%M%S)"
+        info "Moving the previous run to $archive"
+        mkdir -p "$archive"
+        for f in processor* postProcessing log.decomposePar.solve* \
+                 log.potentialFoam* log.simpleFoam* log.reconstructPar* \
+                 $(time_dirs .); do
+            if [ -e "$f" ]; then mv "$f" "$archive/"; fi
+        done
+    fi
+
     if [ -d processor0 ] && [ -n "$(time_dirs processor0)" ]; then
         info "Previous run found in processor*: continuing from its latest time"
     else

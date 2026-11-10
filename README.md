@@ -349,6 +349,33 @@ The anisotropy of the vortex core measured experimentally will not be reproduced
 python scripts/postprocess/main.py
 ```
 
+### Vortex images and core metrics per run (ParaView)
+
+`scripts/postprocess/pv_vortex.py` (run with ParaView's `pvpython` through `pv_vortex.sh`) reads one solved case and writes `scripts/results/<label>/`:
+
+- **images/**, with fixed cameras and colour ranges so runs compare directly:
+  - wing Cp and y⁺ (upper, lower, tip; y⁺ > 5 in magenta);
+  - Q-criterion isosurface, with the near-wall noise from the 10 µm cells removed;
+  - cross-flow planes at the 11 measured stations (Cp_static and u/U∞, swirl arrows, wing section outline);
+  - streamlines and the mesh through the core.
+- **core_metrics.csv**, per station: core position, Cp_min, axial velocity, peak swirl, core radius, cells across the core, and k and ν_t at the core. The core is the minimum Cp among rotation-dominated cells (Q > 0) more than 5 mm from the wing; the core radius is at the first peak of the azimuthally averaged swirl.
+- **swirl_profiles.csv** and **yplus_summary.csv** (area-weighted y⁺, % of area above 1/3/5/10, per wing region).
+
+```bash
+scripts/postprocess/pv_vortex.sh ~/naca_server_500 nutk_medium_500          # reconstructed case
+scripts/postprocess/pv_vortex.sh OpenFOAM spalding_medium --decomposed       # read processor* directly
+```
+
+It finds `pvpython` in `$PVPYTHON`, in `PATH`, or the newest Windows ParaView install (under WSL, paths are converted automatically). It takes about 2 minutes on the medium mesh.
+
+`scripts/postprocess/compare_runs.py` overlays any number of runs and the experiment, which is processed with the same core definition:
+
+```bash
+python3 scripts/postprocess/compare_runs.py nutk_medium_500 spalding_medium_500
+```
+
+It writes `core_comparison.png` (Cp_min, u_core, v_θ,max, r_c and core position vs x/c), `swirl_profiles.png` (v_θ(r) at the trailing edge, x/c = 0.98 and 1.42) and side-by-side CSV tables to `scripts/results/compare_<labels>/`.
+
 ---
 
 ## Results

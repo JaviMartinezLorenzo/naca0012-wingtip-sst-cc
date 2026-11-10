@@ -47,12 +47,14 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
 
 4. **Run the case**
 
-   Unattended, from `OpenFOAM/` (keeps running after you close the SSH session):
+   Unattended, from `OpenFOAM/`:
 ```bash
-   nohup ./Allrun.sh --mesh-only > Allrun.log 2>&1 &   # drop --mesh-only to also solve
-   tail -f Allrun.log
+   ./Allrun.sh --detach              # mesh + solve in the background; you can log out
+   tail -f Allrun.log                # follow progress (Ctrl-C only stops tail)
 ```
-   `Allrun.sh` stops before solving if the disk is short of space, `checkMesh` fails or the wall layers are poor. See `./Allrun.sh --help` for `--solve-only` (reuse the mesh or resume a run) and `--clean`.
+   `--detach` runs the quick checks in your terminal, then relaunches the script in its own session with no terminal. Plain `nohup` is not enough: Open MPI's `mpirun` stops the job when the SSH session closes. The script prints the PID and the command to stop it, and refuses to start a second run in the same case.
+
+   `Allrun.sh` stops before solving if the disk is short of space, `checkMesh` fails or the wall layers are poor. See `./Allrun.sh --help` for `--mesh-only`, `--solve-only` (reuse the mesh or resume a run) and `--clean`.
 
    Or step by step:
 ```bash

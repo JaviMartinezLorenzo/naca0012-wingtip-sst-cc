@@ -2,12 +2,15 @@
 #------------------------------------------------------------------------------
 # Unattended mesh + steady RANS run for the NACA 0012 wingtip vortex case.
 #
-# Usage (survives closing the SSH session):
-#   nohup ./Allrun.sh --mesh-only > Allrun.log 2>&1 &     # mesh, then stop
-#   nohup ./Allrun.sh > Allrun.log 2>&1 &                 # mesh, then solve
-#   tail -f Allrun.log                                    # watch progress
+# Usage:
+#   ./Allrun.sh --detach --mesh-only     # mesh in the background, then stop
+#   ./Allrun.sh --detach                 # mesh, then solve, in the background
+#   tail -f Allrun.log                   # watch progress (Ctrl-C only stops tail)
 #
 # Options:
+#   --detach       run in the background, detached from the terminal, with the
+#                  output in Allrun.log. Survives logging out and closing SSH.
+#                  The quick checks run first, so errors show immediately.
 #   --mesh-only    stop after the mesh has passed its checks
 #   --solve-only   use the existing mesh; resumes if a run was interrupted
 #   --clean        delete previous mesh, results and logs first
@@ -23,10 +26,12 @@
 #
 # The number of MPI ranks is numberOfSubdomains in system/decomposeParDict.
 # The script stops at the first failure, before spending solver time on a bad
-# mesh. Each step writes log.<step> in this directory.
+# mesh. Each step writes log.<step> in this directory. Only one run per case
+# directory at a time (.Allrun.pid).
 #------------------------------------------------------------------------------
 
-cd "$(dirname "$(readlink -f "$0")")"
+SELF=$(readlink -f "$0")
+cd "$(dirname "$SELF")"
 
 #- Load OpenFOAM if this shell has not (its bashrc is not 'set -eu' safe).
 #  Run a tool rather than look for it: PATH can be set without the libraries.
@@ -59,7 +64,7 @@ die() {
 
 trap 'die "unexpected failure at line $LINENO of Allrun.sh"' ERR
 
-usage() { sed -n '3,26p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,30p' "$SELF" | sed 's/^# \{0,1\}//'; }
 
 hms() { printf '%dh%02dm%02ds' $(($1/3600)) $(($1%3600/60)) $(($1%60)); }
 
@@ -114,15 +119,18 @@ mean_layers() {
 # Arguments and pre-flight checks
 #------------------------------------------------------------------------------
 
-doMesh=true doSolve=true doClean=false
+doMesh=true doSolve=true doClean=false doDetach=false
+childArgs=()                      # options passed on to a detached run
 while [ $# -gt 0 ]; do
     case "$1" in
+        --detach)     doDetach=true ;;
         --mesh-only)  doSolve=false ;;
         --solve-only) doMesh=false ;;
         --clean)      doClean=true ;;
         -h|--help)    usage; exit 0 ;;
         *)            usage; die "unknown option: $1" ;;
     esac
+    [ "$1" = --detach ] || childArgs+=("$1")
     shift
 done
 
@@ -158,22 +166,55 @@ a larger disk or set MIN_FREE_GB."
 
 MIN_MEAN_LAYERS=${MIN_MEAN_LAYERS:-22}
 
-if [ "$doClean" = true ]; then
-    info "Cleaning previous mesh, results and logs"
-    rm -rf processor* constant/polyMesh constant/extendedFeatureEdgeMesh \
-           constant/triSurface/wing.eMesh postProcessing subsetBox.obj log.*
-    time_dirs . | while read -r t; do rm -rf "./$t"; done
+PIDFILE=.Allrun.pid
+if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+    die "Allrun.sh is already running in this case (PID $(cat "$PIDFILE")). \
+Follow it with: tail -f Allrun.log"
 fi
 
 if [ "$doMesh" = true ]; then
-    if [ -e constant/polyMesh ] || compgen -G "processor*" > /dev/null \
-       || [ -n "$(time_dirs .)" ]; then
+    if [ "$doClean" = false ] && { [ -e constant/polyMesh ] \
+       || compgen -G "processor*" > /dev/null || [ -n "$(time_dirs .)" ]; }; then
         die "existing mesh or results found. Nothing was changed. Use --clean \
 to delete them, or --solve-only to reuse the mesh."
     fi
 else
     [ -f constant/polyMesh/faces ] || [ -f constant/polyMesh/faces.gz ] \
         || die "no mesh in constant/polyMesh for --solve-only"
+fi
+
+#- Detach: relaunch in a new session (setsid) with no terminal, so that
+#  logging out cannot send it SIGHUP. Open MPI's mpirun handles SIGHUP itself
+#  and stops the job even under nohup.
+if [ "$doDetach" = true ]; then
+    if [ -e Allrun.log ]; then mv Allrun.log "Allrun.log.$(date +%Y%m%d-%H%M%S)"; fi
+    setsid nohup "$SELF" ${childArgs[@]+"${childArgs[@]}"} \
+        > Allrun.log 2>&1 < /dev/null &
+    # wait for the background run to take the lock (or to fail its checks)
+    for _ in $(seq 60); do
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+            info "Running in the background (PID $(cat "$PIDFILE")). You can log out."
+            echo "    follow:  tail -f $PWD/Allrun.log"
+            echo "    stop:    kill -- -$(cat "$PIDFILE")"
+            exit 0
+        fi
+        if grep -q "Allrun.sh STOPPED" Allrun.log 2>/dev/null; then
+            cat Allrun.log >&2
+            die "the background run stopped, see $PWD/Allrun.log"
+        fi
+        sleep 0.5
+    done
+    die "could not confirm the background run started, check $PWD/Allrun.log"
+fi
+
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
+if [ "$doClean" = true ]; then
+    info "Cleaning previous mesh, results and logs"
+    rm -rf processor* constant/polyMesh constant/extendedFeatureEdgeMesh \
+           constant/triSurface/wing.eMesh postProcessing subsetBox.obj log.*
+    time_dirs . | while read -r t; do rm -rf "./$t"; done
 fi
 
 info "Case:  $PWD"

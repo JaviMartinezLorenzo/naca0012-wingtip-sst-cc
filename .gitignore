@@ -19,6 +19,7 @@ OpenFOAM/0/thicknessFraction
 OpenFOAM/log.*
 OpenFOAM/dynamicCode/
 OpenFOAM/subsetBox.obj
+OpenFOAM/.Allrun.pid
 scripts/results/
 
 # Python

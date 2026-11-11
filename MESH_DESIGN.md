@@ -132,9 +132,9 @@ The vortex leaves the tip edge (z ≈ 0.915), moves inboard and down over the af
 | `wakeSheet` | 4 (12.7 mm) | box x 0.80–2.50, z 0.30–0.99 | Wake sheet shed by the outboard wing that feeds the vortex |
 | `nearField` | 3 (25.4 mm) | box around wing and wake | Potential flow and tunnel-wall interaction, gradual transition to the background |
 | `wing` (distance) | 5 to 40 mm, 4 to 120 mm | — | Covers the whole boundary layer (δ ≈ 20–30 mm) outside the prisms |
-| `wing` surface | 6, curvature → 7 | `curvatureLevel (10 0 7 -1)` | 10 cells per radius of curvature: L7 at the LE (r = 19 mm) and the tip/TE region |
+| `wing` surface | 6, curvature → 7 | `curvatureLevel (25 0 7 -1)` | L7 wherever the radius of curvature is below 25 level-6 cells (79 mm): the LE region and the **whole rounded tip** (radius ≤ 73 mm), so no level step falls on the tip surface |
 | TE feature edges | 8 within 2 mm, 7 within 6 mm | `wing.eMesh` | ~3 cells across the 2.54 mm blunt TE: both corners snapped, layers on the TE face |
-| `inboardMidChord` (limitRegions) | cap at 5 | box z < 0.50, −0.255 < x < 0.86 | Inboard half-span is nearly 2-D and far from the vortex. 12.7 mm chordwise (1 %c) is enough there. Removes ~1.5 M prism cells. LE and TE strips keep L7/L8 |
+| `inboardMidChord` (limitRegions) | cap at 5 | box z < 0.50, 0 < x < 0.86 (x/c ≈ 0.25–0.96) | Inboard half-span is nearly 2-D and far from the vortex. 12.7 mm chordwise (1 %c) is enough there. Starts aft of the curved LE region and suction peak, so its edges lie on the flat mid-chord |
 
 `nCellsBetweenLevels 3`: every 2:1 jump is followed by at least three cells of the same size, including across the vortex tubes.
 
@@ -147,9 +147,9 @@ The vortex leaves the tip edge (z ≈ 0.915), moves inboard and down over the af
 | 0.89 (TE) | 30 mm | 5 | 38 |
 | 1.20–1.73 | 38 mm | 6 (≤ 3 at x = 1.73) | 24 |
 
-### 5.3 Layer addition: what was needed for 96 % coverage
+### 5.3 Layer addition: what was needed for full coverage
 
-Getting 25 layers with a 10 µm first cell onto a curved wing with snappy took three changes. Each one was found by generating the medium mesh and measuring per-face layer count and first-cell height:
+Getting 25 layers with a 10 µm first cell onto a curved wing with snappy took several changes. Each one was found by generating the medium mesh and measuring per-face layer count and first-cell height (runs 1–5 locally, 6–7 on the run server):
 
 | Run | Change | Faces with no layers | Faces with all 25 | Tip: mean layers | First cell p90 |
 |---|---|---|---|---|---|
@@ -157,22 +157,27 @@ Getting 25 layers with a 10 µm first cell onto a curved wing with snappy took t
 | 2 | `minDeterminant 1e-6` | 17 % | 18 % | 1.0 | 1.4 mm |
 | 3 | + analytic STL | 13 % | 24 % | 1.0 | 1.4 mm |
 | 4 | + relaxed `minTetQuality` | 0.5 % | 42 % | 17 | 0.48 mm |
-| **5 (final)** | + relaxed `minTwist` | **0.0 %** | **96 %** | **25** | **10.3 µm** |
+| 5 | + relaxed `minTwist` | 0.0 % | 96 % | 25 | 10.3 µm |
+| 6 | + tip curvature level 7, cap box moved to x/c ≈ 0.25 | 0.003 % | 93.5 % | 20.8 (spot B) | — |
+| **7 (final)** | + `nBufferCellsNoExtrude -1` | **5 faces** | **100 %** | **25** | 10 µm |
 
 1. **`minDeterminant 1e-6`** (override in `meshQualityControls`). snappy's scaled determinant is about 27·h²/(Δx·Δz) for a cell of height h. For h = 10 µm on 3–13 mm faces that is 3e-5 to 3e-4, so the default 10⁻³ rejects every near-wall prism. A low determinant here reflects the intended aspect ratio, not a defect.
 2. **`relaxed { minTetQuality -1e30; minTwist -1; }` with `nRelaxedIter 0`** (layer phase only; snapping uses the full checks). On curved walls the snapped faces are slightly non-planar: a 3 mm face on a 20–70 mm radius is warped by about 0.1 mm, ten times the first layer. The face-centre tet decomposition and twist measure of those thin prisms then fail even though cell volumes and face pyramids are positive. With the full checks the tip kept layers on only ~1/3 of its faces.
-3. **Why partial removal is so damaging.** With `nBufferCellsNoExtrude 0`, snappy tapers the layer count by one per ring of faces next to every un-extruded face and keeps the stack height, so tapered faces get a much thicker first cell. In run 4, 0.5 % un-extruded faces were enough to taper 58 % of the wing. Setting `-1` (no taper) gives abrupt layer ends, failing twist checks, and a segfault in v2312, so the fix has to be avoiding un-extruded faces in the first place.
+3. **No layer taper: `nBufferCellsNoExtrude -1`.** With the default (0), snappy tapers the layer count by one per ring of faces next to every un-extruded face and keeps the stack height, so tapered faces get a much thicker first cell. In run 4, 0.5 % un-extruded faces tapered 58 % of the wing; in run 6, 3 faces near the tip tapered 7.5 k faces on the lower outboard surface and tip to about 15 layers. With `-1` those few faces simply have no layers and every other face keeps all 25. Before the twist check was relaxed (run 4), `-1` gave abrupt layer ends that failed the twist check and crashed snappy v2312; with the relaxed checks it runs cleanly.
+4. **No refinement-level steps on curved wall regions.** The first server runs showed y⁺ up to about 250 in two patches (2.8 % of the wing): on the upper surface near the LE at z ≈ 0.5 m, where the corner of the inboard level-5 cap met the level-7 LE region; and on the lower rounded tip, where the edge of the level-7 vortex-core cone cut across the surface. snappy dropped the layers where the cell size stepped on a curved surface. Both regions now have a uniform level (tip all level 7; cap box edges on the flat mid-chord).
 
-Final coverage (medium mesh):
+Final coverage (medium mesh, run 7, snappy v2312 on the run server):
 
-| Region | Faces | All 25 layers | Mean layers | First cell p50 / p90 |
-|---|---|---|---|---|
-| Whole wing | 102 k | 96.4 % | 24.7 | 10.0 / 10.3 µm |
-| Leading edge (x/c < 0.05) | 16 k | 86 % | 23.9 | 10.0 / 17.5 µm |
-| Trailing edge (x/c > 0.95) | 15 k | 100 % | 25.0 | 9.3 / 10.4 µm |
-| Inboard mid-chord (z < 0.5) | 14 k | 95 % | 24.5 | 10.0 / 10.1 µm |
-| Outboard mid-chord | 40 k | 98 % | 24.9 | 10.0 / 10.1 µm |
-| Rounded tip | 18 k | 100 % | 25.0 | 10.0 / 10.2 µm |
+| Region | Faces | All 25 layers | Faces without layers |
+|---|---|---|---|
+| Whole wing | 115.9 k | 100 % | 5 (isolated single faces) |
+| Upper surface, LE (x/c < 0.05) | 7.9 k | 100 % | 1 |
+| Upper surface, mid-chord | 32.3 k | 100 % | 0 |
+| Lower surface | 47.3 k | 100 % | 3 |
+| Rounded tip | 21.2 k | 100 % | 1 |
+| Trailing edge (x/c > 0.95) | 14.3 k | 100 % | 0 |
+| Old spot A (upper, x/c < 0.15, z 0.40–0.55) | 2.3 k | 100 % | 0 |
+| Old spot B (tip, x/c 0.45–0.65) | 6.2 k | 100 % | 0 |
 
 ### 5.4 Wing STL (`geometry/build_wing_stl.py`)
 
@@ -206,26 +211,22 @@ Results:
 
 | Part | Cells |
 |---|---|
-| Levels 0–4: freestream, near field, wake sheet | 175 k |
-| Level 5: wing boundary-layer band, outer vortex tube, inboard surface | 337 k |
-| Level 6: wing surface, inner vortex tube | 685 k |
-| Level 7: vortex core cones, LE, tip | 747 k |
-| Level 8: trailing edge | 14 k |
-| Prism layers (102 k wing faces × ~24.7) | 2 521 k |
-| **Total** | **4.48 M** |
+| Volume mesh after snapping (all refinement levels) | 2.02 M |
+| Prism layers (115.9 k wing faces × 25) | 2.90 M |
+| **Total** | **4.92 M** |
 
-So 2.0 M cells hold the volume resolution (of which ~1.4 M are on the vortex) and 2.5 M are wall-resolution layers. The 2 M budget cannot hold a y⁺ ≈ 1 mesh: the layers alone exceed it. The medium mesh is the smallest that resolves both the core (≥ 18 cells across) and the wall (y⁺ ≈ 1 with 25 layers).
+About 2.0 M cells hold the volume resolution (roughly 1.4 M of them on the vortex) and 2.9 M are wall-resolution layers. The 2 M budget cannot hold a y⁺ ≈ 1 mesh: the layers alone exceed it. The medium mesh is the smallest that resolves both the core (≥ 18 cells across) and the wall (y⁺ ≈ 1 with 25 layers). The tip and leading-edge fixes (§5.3) added about 0.5 M cells to the previous 4.42 M.
 
 `checkMesh` (default checks): **Mesh OK.**
 
 | Metric | Value |
 |---|---|
-| Max skewness | 2.50 |
-| Max aspect ratio | 808 (prism layers) |
-| Min cell volume | 2.2e-12 m³ (positive) |
+| Max skewness | 2.79 |
+| Max aspect ratio | 786 (prism layers) |
+| Min cell volume | 2.1e-12 m³ (positive) |
 | Face pyramids | OK |
-| Max non-orthogonality | 87.2°, average 9.6° |
-| Faces > 70° | 16 795, **all inside the prism layers** (owner cell < 0.44 mm from the wall, median 0.04 mm). Outside the layers the max is ~68° |
+| Max non-orthogonality | 74.8°, average 8.0° |
+| Faces > 70° | 81 (16.8 k on the earlier mesh with tapered layers) |
 
 `checkMesh -allGeometry` additionally flags face-tet quality (51 k faces), small determinant (< 10⁻³ in 1.47 M cells) and concave cells (71 k). All of these come from the thin layer cells on curved walls (§5.3). They affect particle tracking and `cellPoint` interpolation, not the finite-volume solution. The probes use the default `cell` interpolation.
 
@@ -241,11 +242,11 @@ All snappy levels are relative to the background, and the layer stack is defined
 
 | Mesh | nx, ny, nz | Background (in) | Wing faces | Cells before layers | Total cells | Status |
 |---|---|---|---|---|---|---|
-| Coarse | 12, 3, 5 | 20.0 × 10.7 × 9.6 | 69 k | 0.9 M | **2.34 M** (measured) | Generated; mean 19.4 layers per face, and `checkMesh` reports 1 failed check, **not yet investigated** |
-| Medium | 15, 4, 6 | 16.0 × 8.0 × 8.0 | 102 k | 1.96 M | **4.48 M** (measured) | Generated and verified (§5.3, §6) |
-| Fine | 19, 5, 8 | 12.6 × 6.4 × 6.0 | 225 k | 4.0 M (measured) | **~9.5 M** (estimate: + 225 k × ~24.5 layers) | Castellated stage only; layers not yet run |
+| Coarse | 12, 3, 5 | 20.0 × 10.7 × 9.6 | 69 k | 0.9 M | 2.34 M (measured with the earlier settings) | Re-mesh with the final settings. Its 1 failed `checkMesh` check is the fixed aspect-ratio limit of 1000 (67 cells up to 1247), expected with 10 µm layers on larger faces |
+| Medium | 15, 4, 6 | 16.0 × 8.0 × 8.0 | 116 k | 2.02 M | **4.92 M** (measured) | Generated and verified (§5.3, §6) |
+| Fine | 19, 5, 8 | 12.6 × 6.4 × 6.0 | 225 k | 4.0 M (measured, earlier settings) | ~10 M (estimate) | Castellated stage only; re-mesh with the final settings |
 
-Effective refinement ratios from the measured counts: coarse→medium (4.48/2.34)^(1/3) = 1.24, medium→fine ≈ (9.5/4.48)^(1/3) = 1.28.
+Refinement ratios must be recomputed from the cell counts of the coarse and fine meshes once they are re-meshed with the final settings (target ≈ 1.26).
 
 The fine mesh has 2.2× the wing faces of the medium mesh, more than the r² ≈ 1.6 expected. Its layer count, and so its total, must be confirmed by a full run.
 

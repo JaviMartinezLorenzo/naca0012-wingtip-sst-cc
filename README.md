@@ -78,7 +78,7 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
 ```
    - `-np` must equal `numberOfSubdomains` in `system/decomposeParDict` (12, the server's physical cores; use 8 on a 4-core laptop).
    - `potentialFoam` is needed: starting `simpleFoam` from the uniform field gives very large continuity errors in the first iterations.
-   - Medium mesh: ~4.5 M cells, 1–2 GB per written time; keep the case on a partition with tens of GB free.
+   - Medium mesh: ~4.9 M cells, 1–2 GB per written time; keep the case on a partition with tens of GB free.
    - Steady run: up to 5000 iterations, written every 500 (last 2 kept). `yPlus`, residuals and C_L/C_D are logged; for a quick y⁺ check set `writeInterval 250` in `system/controlDict`.
 
 5. **Sample probes from the solved case**

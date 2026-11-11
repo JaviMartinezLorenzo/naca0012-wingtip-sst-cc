@@ -132,13 +132,17 @@ geometry
     // ---- Inboard wing, mid-chord: surface capped at level 5 (limitRegions) --
     // The inboard half-span (z < 0.50 m, i.e. > 0.34c from the tip) carries
     // nearly 2-D attached flow and is far from the vortex. Capping its surface
-    // at level 5 (12.7 mm chordwise, 1 %c) removes ~1.5 M prism cells. The
-    // box stops short of the leading edge (x < -0.255, curvature level 7 kept)
-    // and the trailing edge (x > 0.86, level 7/8 kept).
+    // at level 5 (12.7 mm chordwise, 1 %c) removes ~1 M prism cells.
+    // The box starts at x = 0 (x/c ~ 0.25), aft of the curved leading-edge
+    // region and the suction peak, and stops before the trailing edge
+    // (x > 0.86, level 7/8 kept). Its edges then lie on the flat mid-chord.
+    // (Starting it at x/c ~ 0.04 put a level 7/6/5 junction on the curved
+    // upper surface near the LE at z ~ 0.5 m: snappy dropped the wall layers
+    // there and y+ reached ~250.)
     inboardMidChord
     {
         type box;
-        min  (-0.255 -0.25 -0.01);
+        min  ( 0.000 -0.25 -0.01);
         max  ( 0.860  0.20  0.50);
     }
 
@@ -191,10 +195,14 @@ castellatedMeshControls
             // Level 6 on the wing (3.18 mm spanwise, 6.35 mm chordwise), except
             // the inboard mid-chord region capped at 5 by limitRegions.
             // curvatureLevel adds level 7 where the radius of curvature is
-            // below ~10 cells, i.e. the leading edge (r_LE = 19 mm) and the
-            // tip/trailing-edge junction.
+            // below 25 level-6 cells (79 mm): the leading-edge region and the
+            // whole rounded tip (radius = local half-thickness <= 73 mm).
+            // The tip is then uniformly level 7, so the edge of the level-7
+            // vortex-core cone no longer cuts across the tip surface. (With 10
+            // cells per radius, a level 6/7 step on the lower tip lost its wall
+            // layers and y+ reached ~230.)
             level (6 7);
-            curvatureLevel (10 0 7 -1);
+            curvatureLevel (25 0 7 -1);
             patchInfo
             {
                 type wall;
@@ -327,13 +335,16 @@ addLayersControls
 
     minMedialAxisAngle 90;
 
-    // Keep 0. snappy tapers the layer count down next to faces it could not
-    // extrude (one layer less per ring of faces), keeping the stack height, so
-    // tapered faces get a THICKER first cell. That is why the 'relaxed' checks
-    // below matter: they stop faces being un-extruded in the first place.
-    // (-1 = no taper: produced abrupt layer ends, failing twist checks, and a
-    // segfault in snappyHexMesh v2312.)
-    nBufferCellsNoExtrude 0;
+    // -1 = no taper. With the default (0), snappy tapers the layer count down
+    // next to every face it cannot extrude (one layer less per ring of faces)
+    // while keeping the stack height, so the tapered faces get a much thicker
+    // first cell. On this wing 3 un-extruded faces near the tip tapered
+    // 7.5 k faces (lower outboard surface and tip) to ~15 layers. With -1
+    // those few faces simply have no layers and every other face keeps all
+    // 25 (100 % coverage on the medium mesh, 5 faces without layers).
+    // Only usable together with the relaxed minTwist/minTetQuality below:
+    // with the full checks the abrupt layer ends fail and snappy v2312 crashed.
+    nBufferCellsNoExtrude -1;
 
     nLayerIter 50;
 

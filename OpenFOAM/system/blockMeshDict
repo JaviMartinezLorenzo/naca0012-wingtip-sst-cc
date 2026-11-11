@@ -44,10 +44,9 @@ FoamFile
 // mesh scales consistently (refinement ratio ~1.26 per direction).
 //
 //            nx   ny   nz     background (in)       total cells (snappy v2312)
-//   coarse   12    3    5     20.0 x 10.7 x 9.6        2.34 M (measured)
-//   medium   15    4    6     16.0 x  8.0 x 8.0        4.48 M (measured)  <- default
-//   fine     19    5    8     12.6 x  6.4 x 6.0        ~9.5 M (castellated 4.0 M measured
-//                                                       + ~5.5 M layers estimated)
+//   coarse   12    3    5     20.0 x 10.7 x 9.6        ~2.6 M (2.34 M with earlier settings)
+//   medium   15    4    6     16.0 x  8.0 x 8.0        4.92 M (measured)  <- default
+//   fine     19    5    8     12.6 x  6.4 x 6.0        ~10 M  (estimate)
 //
 // (See MESH_DESIGN.md for the full rationale.)
 

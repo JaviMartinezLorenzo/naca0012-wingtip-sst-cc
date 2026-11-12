@@ -79,7 +79,7 @@ Numerical simulation of the near-field wingtip vortex flow over a half-span **NA
    - `-np` must equal `numberOfSubdomains` in `system/decomposeParDict` (12, the server's physical cores; use 8 on a 4-core laptop).
    - `potentialFoam` is needed: starting `simpleFoam` from the uniform field gives very large continuity errors in the first iterations.
    - Medium mesh: ~4.9 M cells, 1–2 GB per written time; keep the case on a partition with tens of GB free.
-   - Steady run: up to 5000 iterations, written every 500 (last 2 kept). `yPlus`, residuals and C_L/C_D are logged; for a quick y⁺ check set `writeInterval 250` in `system/controlDict`.
+   - Steady run: 1000 iterations (see [Wake convergence](#wake-convergence)), written every 500 (last 2 kept). `yPlus`, residuals and C_L/C_D are logged; for a quick y⁺ check set `writeInterval 250` in `system/controlDict`.
 
 5. **Sample probes from the solved case**
 ```bash
@@ -375,6 +375,19 @@ python3 scripts/postprocess/compare_runs.py nutk_medium_500 spalding_medium_500
 ```
 
 It writes `core_comparison.png` (Cp_min, u_core, v_θ,max, r_c and core position vs x/c), `swirl_profiles.png` (v_θ(r) at the trailing edge, x/c = 0.98 and 1.42) and side-by-side CSV tables to `scripts/results/compare_<labels>/`.
+
+### Wake convergence
+
+The forces settle long before the vortex in the wake. `controlDict` logs, every iteration, the minimum `p` (the vortex core) in thin slabs at the five measured wake stations, x = 0.907 to 1.727 m (cellZones `wake_x*` from `system/topoSetDict`; `Allrun.sh` runs `topoSet` after meshing, or before solving a mesh that has no zones). `scripts/postprocess/wake_convergence.py` reads these and `forceCoeffs`, across restarts:
+
+```bash
+rsync -a server:<case>/OpenFOAM/postProcessing ~/naca_run/      # only the monitor files
+python3 scripts/postprocess/wake_convergence.py ~/naca_run spalding_2500
+```
+
+A signal counts as settled once its spread over the last 200 iterations stays below 0.5 % (core Cp_min) or 0.1 % (Cl, Cd) of its mean. The script prints the iteration from which every signal is settled and writes `wake_convergence.png` and `.csv` to `scripts/results/<label>/`. Options: `--window`, `--tol-cp`, `--tol-force`.
+
+Result with SST + Spalding on the medium mesh, run to 2500 iterations (monitors from iteration 500): C_L and C_D settle by ~330 iterations, the wake core Cp_min by ~650; from 1000 to 2500 the core Cp_min changes by less than 0.03 % at every station and C_L by less than 1e-5. Residuals level off near 1e-5 from ~500 iterations and never reach `residualControl`. Hence `endTime 1000`; check every new model or mesh with the script and extend with `--solve-only` if needed.
 
 ---
 

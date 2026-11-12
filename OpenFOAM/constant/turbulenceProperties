@@ -23,6 +23,13 @@ RAS
     turbulence      on;
 
     printCoeffs     on;
+
+    // Standard SST value of the shear-stress limiter constant (Bradshaw).
+    // The FSAE team runs use a1 1; compare with the a1 variant runs.
+    kOmegaSSTCoeffs
+    {
+        a1              0.31;
+    }
 }
 
 

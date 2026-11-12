@@ -1,0 +1,54 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     |
+    \\  /    A nd           | www.openfoam.com
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      topoSetDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Thin crossflow slabs at the measured wake stations (x = TE + 6 mm to
+// x/c = 1.42), used by the wake_x* volFieldValue monitors in controlDict to
+// log the minimum pressure (the vortex core) every iteration. The core does
+// not touch the wing there, so the minimum p in a slab is the core.
+//
+// Slab: x0 +/- 4 mm. The background is stretched 2:1 in x, so level-6 cells
+// are 6.4 mm long in x; a thinner slab can miss the core cells. Same
+// crossflow window as pv_vortex.py: y -0.25..0.10, z 0.60..1.00 m.
+// Allrun.sh runs topoSet after meshing; cellZones are kept by decomposePar.
+
+ymin -0.25;  ymax 0.10;
+zmin  0.60;  zmax 1.00;
+dx    0.004;
+
+// One slab = a cellSet, then a cellZone made from it.
+slab
+{
+    type    cellSet;
+    action  new;
+    source  boxToCell;
+}
+
+actions
+(
+    { name wake_x0907_set; $slab; box (#eval{0.9069-$dx} $ymin $zmin) (#eval{0.9069+$dx} $ymax $zmax); }
+    { name wake_x1054_set; $slab; box (#eval{1.0538-$dx} $ymin $zmin) (#eval{1.0538+$dx} $ymax $zmax); }
+    { name wake_x1201_set; $slab; box (#eval{1.2007-$dx} $ymin $zmin) (#eval{1.2007+$dx} $ymax $zmax); }
+    { name wake_x1452_set; $slab; box (#eval{1.4524-$dx} $ymin $zmin) (#eval{1.4524+$dx} $ymax $zmax); }
+    { name wake_x1727_set; $slab; box (#eval{1.7272-$dx} $ymin $zmin) (#eval{1.7272+$dx} $ymax $zmax); }
+
+    { name wake_x0907; type cellZoneSet; action new; source setToCellZone; set wake_x0907_set; }
+    { name wake_x1054; type cellZoneSet; action new; source setToCellZone; set wake_x1054_set; }
+    { name wake_x1201; type cellZoneSet; action new; source setToCellZone; set wake_x1201_set; }
+    { name wake_x1452; type cellZoneSet; action new; source setToCellZone; set wake_x1452_set; }
+    { name wake_x1727; type cellZoneSet; action new; source setToCellZone; set wake_x1727_set; }
+);
+
+// ************************************************************************* //

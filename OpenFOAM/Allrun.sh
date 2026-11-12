@@ -20,11 +20,13 @@
 #   --clean        delete previous mesh, results and logs first
 #   -h, --help     show this help
 #
-# OpenFOAM: the version already loaded in the shell is used. If none is
-# loaded, the newest installed one is sourced. To pick one, source it first:
-#   source /usr/lib/openfoam/openfoam2312/etc/bashrc
+# OpenFOAM: the version already loaded in the shell is used (with a warning
+# if it is not FOAM_VERSION). If none is loaded, FOAM_VERSION (default 2312,
+# the version the case was set up and validated with) is sourced; the newest
+# installed one only if that is missing. Another version: FOAM_VERSION=2606.
 #
 # Environment overrides:
+#   FOAM_VERSION      OpenFOAM version to source if none is loaded (default 2312)
 #   MPI_OPTS          mpirun options (default: --map-by socket --bind-to core)
 #                     e.g. MPI_OPTS="--use-hwthread-cpus" on a laptop
 #   MIN_FREE_GB       free disk needed to start (default: 30)
@@ -45,15 +47,25 @@ cd "$(dirname "$SELF")"
 #  Run a tool rather than look for it: PATH can be set without the libraries.
 foam_ok() { [ -n "${WM_PROJECT_DIR:-}" ] && foamDictionary -help > /dev/null 2>&1; }
 
+FOAM_VERSION=${FOAM_VERSION:-2312}
+
 if ! foam_ok; then
-    for rc in $(ls -d /usr/lib/openfoam/openfoam*/etc/bashrc \
-                      /opt/openfoam*/etc/bashrc \
+    for rc in $(ls -d /usr/lib/openfoam/openfoam"$FOAM_VERSION"/etc/bashrc \
+                      /opt/openfoam"$FOAM_VERSION"/etc/bashrc \
+                      "$HOME"/OpenFOAM/OpenFOAM-v"$FOAM_VERSION"/etc/bashrc 2>/dev/null) \
+              $(ls -d /usr/lib/openfoam/openfoam[0-9]*/etc/bashrc \
+                      /opt/openfoam[0-9]*/etc/bashrc \
                       "$HOME"/OpenFOAM/OpenFOAM-*/etc/bashrc 2>/dev/null | sort -V -r); do
-        echo "OpenFOAM not loaded, sourcing $rc"
+        case "$rc" in
+            *"$FOAM_VERSION"/etc/bashrc) echo "OpenFOAM not loaded, sourcing $rc" ;;
+            *) echo "WARNING: OpenFOAM v$FOAM_VERSION not found, sourcing $rc" ;;
+        esac
         # shellcheck disable=SC1090
         source "$rc"
         break
     done
+elif [ "${WM_PROJECT_VERSION:-}" != "v$FOAM_VERSION" ] && [ "${WM_PROJECT_VERSION:-}" != "$FOAM_VERSION" ]; then
+    echo "WARNING: OpenFOAM ${WM_PROJECT_VERSION:-?} is loaded, not v$FOAM_VERSION; using it"
 fi
 
 set -euo pipefail
@@ -72,7 +84,7 @@ die() {
 
 trap 'die "unexpected failure at line $LINENO of Allrun.sh"' ERR
 
-usage() { sed -n '3,38p' "$SELF" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '3,/^#---/p' "$SELF" | sed '$d; s/^# \{0,1\}//'; }
 
 hms() { printf '%dh%02dm%02ds' $(($1/3600)) $(($1%3600/60)) $(($1%60)); }
 
@@ -114,6 +126,11 @@ check_mesh_verdict() {
     fi
     [ -z "$other" ] || echo "$other" >&2
     die "checkMesh reported failures, see $PWD/$1"
+}
+
+# True if the mesh in <case dir> has the wake monitor cellZones (topoSetDict)
+has_wake_zones() {
+    grep -qs wake_x "$1/constant/polyMesh/cellZones"
 }
 
 # Mean layers per face on the wing, from the final table in log.snappyHexMesh
@@ -264,6 +281,7 @@ if [ "$doMesh" = true ]; then
         || die "mean layers $layers is below MIN_MEAN_LAYERS=$MIN_MEAN_LAYERS: \
 the first cell would be too thick on part of the wing. Mesh kept for inspection."
 
+    run topoSet topoSet           # wake monitor zones, see system/topoSetDict
     info "MESH READY ($(hms $((SECONDS-totalStart))))"
 fi
 
@@ -285,8 +303,10 @@ if [ "$doSolve" = true ]; then
 
     if [ -d processor0 ] && [ -n "$(time_dirs processor0)" ]; then
         info "Previous run found in processor*: continuing from its latest time"
+        has_wake_zones processor0 || run_par topoSet topoSet
     else
         rm -rf processor*
+        has_wake_zones . || run topoSet topoSet
         run decomposePar.solve decomposePar
         run_par potentialFoam potentialFoam -writephi
     fi

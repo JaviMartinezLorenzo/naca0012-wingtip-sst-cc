@@ -4,7 +4,7 @@ pv_vortex.py: images and vortex-core metrics for one run (ParaView pvpython).
 Run through pv_vortex.sh (finds pvpython, converts WSL paths), or directly:
     pvpython --force-offscreen-rendering pv_vortex.py <case dir or .foam> <label>
 
-Writes scripts/results/<label>/:
+Writes scripts/results/runs/<label>/:
     images/        wing Cp and y+, Q-criterion isosurface, cross-flow planes at
                    the measured stations, streamlines, mesh through the core
     core_metrics.csv     per measured station: core position, Cp_min, axial
@@ -240,7 +240,7 @@ def main():
     ap.add_argument("label", help="run label, e.g. nutk_medium_500")
     ap.add_argument("--time", type=float, default=None, help="time to load (default: latest)")
     ap.add_argument("--decomposed", action="store_true", help="read processor* directories")
-    ap.add_argument("--out", default=None, help="output directory (default: scripts/results/<label>)")
+    ap.add_argument("--out", default=None, help="output directory (default: scripts/results/runs/<label>)")
     ap.add_argument("--q-star", type=float, default=50.0,
                     help="Q isosurface level as Q* = Q c^2 / U_inf^2 (default 50)")
     ap.add_argument("--no-images", action="store_true", help="metrics only")
@@ -248,7 +248,7 @@ def main():
 
     here = os.path.dirname(os.path.abspath(__file__))
     repo = os.path.abspath(os.path.join(here, "..", ".."))
-    outdir = args.out or os.path.join(repo, "scripts", "results", args.label)
+    outdir = args.out or os.path.join(repo, "scripts", "results", "runs", args.label)
     imgdir = os.path.join(outdir, "images")
     os.makedirs(imgdir, exist_ok=True)
 

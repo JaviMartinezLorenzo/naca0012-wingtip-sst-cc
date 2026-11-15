@@ -4,8 +4,8 @@ compare_runs.py: overlay vortex-core metrics of several runs and the experiment.
 
     python3 scripts/postprocess/compare_runs.py <label> [<label> ...] [--out NAME]
 
-Each <label> is a folder scripts/results/<label>/ written by pv_vortex.py.
-Writes scripts/results/<NAME>/ (default compare_<label1>_vs_<label2>...):
+Each <label> is a folder scripts/results/runs/<label>/ written by pv_vortex.py.
+Writes scripts/results/comparisons/<NAME>/ (default compare_<label1>_vs_<label2>...):
     core_comparison.png   Cp_min, axial velocity, peak swirl, core radius and
                           core position vs x/c, runs + experiment
     swirl_profiles.png    v_theta(r) at the trailing edge and two wake stations
@@ -30,6 +30,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 RESULTS = ROOT / "scripts" / "results"
+RUNS = RESULTS / "runs"                 # one folder per run (pv_*.py output)
 sys.path.insert(0, str(HERE))
 from import_exp_data import exp_data          # noqa: E402
 
@@ -87,20 +88,20 @@ def experiment():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    ap.add_argument("labels", nargs="+", help="run labels (folders in scripts/results)")
-    ap.add_argument("--out", default=None, help="output folder name in scripts/results")
+    ap.add_argument("labels", nargs="+", help="run labels (folders in scripts/results/runs)")
+    ap.add_argument("--out", default=None, help="output folder name in scripts/results/comparisons")
     args = ap.parse_args()
 
     runs = {}
     for lab in args.labels:
-        f = RESULTS / lab / "core_metrics.csv"
+        f = RUNS / lab / "core_metrics.csv"
         if not f.exists():
             sys.exit(f"missing {f}: run pv_vortex.sh for '{lab}' first")
         runs[lab] = (pd.read_csv(f).sort_values("x"),
-                     pd.read_csv(RESULTS / lab / "swirl_profiles.csv"))
+                     pd.read_csv(RUNS / lab / "swirl_profiles.csv"))
     exp, exp_prof = experiment()
 
-    out = RESULTS / (args.out or "compare_" + "_vs_".join(args.labels))
+    out = RESULTS / "comparisons" / (args.out or "compare_" + "_vs_".join(args.labels))
     out.mkdir(parents=True, exist_ok=True)
 
     # ---- metrics vs x/c -------------------------------------------------------
@@ -163,7 +164,7 @@ def main():
 
     ys = []
     for lab in runs:
-        f = RESULTS / lab / "yplus_summary.csv"
+        f = RUNS / lab / "yplus_summary.csv"
         if f.exists():
             d = pd.read_csv(f)
             d.insert(0, "run", lab)

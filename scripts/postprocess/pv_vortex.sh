@@ -12,7 +12,7 @@
 # pvpython is taken from $PVPYTHON, else from PATH, else from the newest
 # Windows ParaView install (C:\Program Files\ParaView *). With the Windows
 # pvpython.exe under WSL, paths are converted with wslpath automatically.
-# Results go to scripts/results/<label>/.
+# Results go to scripts/results/runs/<label>/.
 #------------------------------------------------------------------------------
 set -euo pipefail
 

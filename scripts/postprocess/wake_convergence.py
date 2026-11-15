@@ -15,7 +15,7 @@ A signal counts as settled at iteration i when, over the window of the last
 "settled from" iteration is the first one after which it stays settled until
 the end of the data. The case is settled when every signal is.
 
-Writes scripts/results/<label>/:
+Writes scripts/results/runs/<label>/:
     wake_convergence.png   Cp_min per station and Cl, Cd vs iteration, and
                            the change relative to the last value
     wake_convergence.csv   per signal: last value, spread over the last
@@ -34,6 +34,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "scripts" / "results"
+RUNS = RESULTS / "runs"                 # one folder per run (pv_*.py output)
 
 U_INF = 51.816
 Q_INF = 0.5 * U_INF ** 2          # kinematic dynamic pressure
@@ -88,7 +89,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("case", type=Path, help="OpenFOAM case dir (has postProcessing/)")
-    ap.add_argument("label", help="output folder name under scripts/results/")
+    ap.add_argument("label", help="output folder name under scripts/results/runs/")
     ap.add_argument("--window", type=int, default=200, help="iterations (default 200)")
     ap.add_argument("--tol-cp", type=float, default=0.005,
                     help="relative spread allowed for Cp_min (default 0.005)")
@@ -112,7 +113,7 @@ def main():
     if not signals:
         sys.exit(f"no monitor data in {a.case / 'postProcessing'}")
 
-    out = RESULTS / a.label
+    out = RUNS / a.label
     out.mkdir(parents=True, exist_ok=True)
 
     rows = []

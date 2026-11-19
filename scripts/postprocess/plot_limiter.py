@@ -157,7 +157,7 @@ def r_panel(ax, d, label):
     return im
 
 
-def fig_map(label, out):
+def fig_map(label, out, a1="0.31", fname="2_limiter_map.png", subtitle=None):
     names = ["zoom_x0.30", "zoom_x0.66", "zoom_x0.89", "zoom_x1.05"]
     fig, axes = plt.subplots(1, 4, figsize=(20, 6.2), constrained_layout=True)
     for ax, n in zip(axes, names):
@@ -170,13 +170,13 @@ def fig_map(label, out):
             ((0.66, 0.125), "outer edge of the\nboundary layer", (0.72, 0.01))],
         1: [((0.66, 0.02), "vortex starts at the tip;\nits core is blue (r = 1)", (0.82, -0.065)),
             ((0.70, -0.26), "tip shear layer leaving\nthe pressure side: limited", (0.865, -0.12))],
-        2: [((0.75, 0.03), "vortex core:\nr = 1, limiter off", (0.82, -0.10)),
-            ((0.66, -0.26), "boundary layer near the\ntrailing edge: limited", (0.62, -0.155)),
+        2: [((0.66, -0.26), "boundary layer near the\ntrailing edge: limited", (0.62, -0.155)),
             ((0.97, 0.12), "feeding\nshear layer", (0.91, 0.0))],
-        3: [((0.70, -0.06), "core: r = 1", (0.82, -0.10)),
-            ((0.70, 0.04), "wake sheet rolling in:\nlimited", (0.86, 0.0)),
+        3: [((0.70, 0.04), "wake sheet rolling in:\nlimited", (0.86, 0.0)),
             ((0.80, -0.27), "edge of the turbulent\nregion: limited", (0.965, -0.13))],
     }
+    if a1 != "0.31":
+        notes = {}                     # labels are placed for the a1 = 0.31 solution
     for i, items in notes.items():
         for (z, y), txt, tip in items:
             kw = dict(arrowprops=dict(arrowstyle="->", lw=1.3, color="k")) if tip else {}
@@ -186,11 +186,11 @@ def fig_map(label, out):
                                        alpha=0.9), **kw)
     cb = fig.colorbar(im, ax=axes, shrink=0.85, pad=0.01, ticks=R_BOUNDS[:-1] + [1.0])
     cb.set_label("r = ν_t ω / k      (blue: r = 1, limiter off;  red: ν_t cut to r × k/ω)")
-    fig.suptitle("Where the SST limiter is active (a1 = 0.31, iteration 1000).  + = vortex core.  "
+    fig.suptitle(f"Where the SST limiter is active (a1 = {a1}, iteration 1000).  + = vortex core (r = 1 at every station).  "
                  "Seen from upstream, tip to the right.\n"
-                 f"White: ν_t < {NUT_MIN:g} ν (freestream level, grey line), the limiter changes nothing there.",
+                 + (subtitle or f"White: ν_t < {NUT_MIN:g} ν (freestream level, grey line), the limiter changes nothing there."),
                  fontsize=13)
-    fig.savefig(out / "2_limiter_map.png", dpi=150)
+    fig.savefig(out / fname, dpi=150)
     plt.close(fig)
 
 
@@ -249,7 +249,7 @@ def fig_compare(lab1, lab2, out):
             ax.set_ylabel("y (up) [m]")
     box = dict(boxstyle="round,pad=0.25", fc="white", ec="0.3", alpha=0.9)
     arrow = dict(arrowstyle="->", lw=1.3)
-    for j in (2, 3):
+    for j in (2,):
         axes[2, j].annotate("core: about the same ν_t\n(limiter off in both runs)", (0.82, -0.10),
                             xytext=(0.80, -0.26), ha="center", fontsize=10, bbox=box,
                             arrowprops=arrow, zorder=6)
@@ -264,8 +264,8 @@ def fig_compare(lab1, lab2, out):
     cb = fig.colorbar(imr, ax=axes[2, :], shrink=0.9, pad=0.01)
     cb.set_label("ν_t(a1 = 1) / ν_t(a1 = 0.31)   (red: more with a1 = 1; white area: ν_t < 10 ν in both)")
     fig.suptitle("Eddy viscosity with the default a1 = 0.31 and the team's a1 = 1 "
-                 "(both converged, iteration 1000)\nBlue rim of the ratio maps: the turbulent region "
-                 "ends slightly further in with a1 = 1; ν_t there is only 10-30 ν in both runs.",
+                 "(both converged, iteration 1000)\nBlue ring in the ratio maps: edge of the turbulent region, "
+                 "where ν_t is close to the freestream value in both runs (not important).",
                  fontsize=14)
     fig.savefig(out / "4_nut_a031_vs_a1.png", dpi=130)
     plt.close(fig)
@@ -283,6 +283,9 @@ def main():
     fig_map(a.label, a.out)
     fig_span(a.label, a.out)
     if a.label_a1:
+        fig_map(a.label_a1, a.out, a1="1", fname="2b_limiter_map_a1.png",
+                subtitle="Same colours as for a1 = 0.31. Where ν_t is large (tip shear layer, trailing-edge boundary layers) the limiter is now off.\n"
+                         "Dark red outside: nearly freestream fluid (ν_t ≈ 10-15 ν, tiny ω), limited in both runs; with a1 = 0.31 its ν_t is < 10 ν, so it shows white there.")
         fig_compare(a.label, a.label_a1, a.out)
     print(f"written: {a.out}")
 

@@ -19,6 +19,8 @@ images instead of scattered cell centres):
 
 Each npz has y, z (1-D), r, nut_nu, k, omega (2-D, [z, y]) and mask
 (1 inside the fluid, 0 inside the wing / outside the mesh), plus x.
+--extra NAME ... also samples those cell fields (e.g. fr1 for SST-RC runs)
+and stores them under the same names.
 Plot with plot_limiter.py.
 """
 
@@ -37,7 +39,7 @@ SPAN_X = 0.89
 SPAN_BOX = (-0.35, 0.15, 0.0, 1.05, 0.0025)
 
 
-def sample(src, x, box, t):
+def sample(src, x, box, t, extra=()):
     y0, y1, z0, z1, h = box
     ny = int(round((y1 - y0) / h)) + 1
     nz = int(round((z1 - z0) / h)) + 1
@@ -60,7 +62,8 @@ def sample(src, x, box, t):
     return dict(x=x, y=np.linspace(y0, y1, ny), z=np.linspace(z0, z1, nz),
                 r=r, nut_nu=np.where(mask > 0, nut / NU, np.nan),
                 k=np.where(mask > 0, k, np.nan), omega=np.where(mask > 0, om, np.nan),
-                mask=mask)
+                mask=mask,
+                **{n: np.where(mask > 0, g(n), np.nan) for n in extra})
 
 
 def main():
@@ -70,6 +73,8 @@ def main():
     ap.add_argument("--time", type=float, default=None)
     ap.add_argument("--decomposed", action="store_true")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--extra", nargs="*", default=[],
+                    help="more cell fields to sample, e.g. fr1")
     a = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +95,7 @@ def main():
     r.UpdatePipelineInformation()
     times = list(r.TimestepValues) if r.TimestepValues else [0.0]
     t = a.time if a.time is not None else max(times)
-    r.CellArrays = ["k", "omega", "nut"]
+    r.CellArrays = ["k", "omega", "nut"] + a.extra
     internal = ExtractBlock(Input=r, Selectors=["/Root/internalMesh"])
     internal.UpdatePipeline(t)
     print(f"[pv_limiter] {case} time {t:g}", flush=True)
@@ -98,7 +103,7 @@ def main():
     jobs = [(f"zoom_x{x:.2f}", x, ZOOM_BOX) for x in ZOOM_X]
     jobs.append((f"span_x{SPAN_X:.2f}", SPAN_X, SPAN_BOX))
     for name, x, box in jobs:
-        d = sample(internal, x, box, t)
+        d = sample(internal, x, box, t, a.extra)
         np.savez_compressed(os.path.join(out, name + ".npz"), time=t, **d)
         lim = np.nanmean(d["r"] < 0.99) * 100
         print(f"[pv_limiter] {name}: {d['r'].shape}, limiter active in {lim:.1f} % of the plane",

@@ -183,6 +183,20 @@ functions
         log             off;
     }
 
+    // Max (and min) of the turbulence fields with their location, every
+    // iteration: shows where a divergence starts.
+    fieldMinMax
+    {
+        type            fieldMinMax;
+        libs            (fieldFunctionObjects);
+        fields          (k omega nut U p);
+        mode            magnitude;
+        location        true;
+        writeControl    timeStep;
+        writeInterval   1;
+        log             false;
+    }
+
     // ── Wake convergence monitors ─────────────────────────────────────────
     // Minimum p in thin slabs at the measured wake stations (cellZones from
     // system/topoSetDict) = vortex-core pressure, every iteration.
